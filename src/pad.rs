@@ -1,5 +1,6 @@
-use std::ops::RangeBounds;
+use std::ops::{Bound, RangeBounds};
 
+#[derive(Clone, Copy)]
 pub struct Padding<D: Copy> {
     data: D,
 }
@@ -46,9 +47,15 @@ impl<D: Copy, L: RangeBounds<usize>> IntoIterator for PadBounded<D, L> {
     type IntoIter = PadBoundedIter<D, L>;
 
     fn into_iter(self) -> Self::IntoIter {
+        let start_bound = self.range.start_bound();
+        let current_idx = match start_bound {
+            Bound::Unbounded => 0,
+            Bound::Excluded(&x) => x + 1,
+            Bound::Included(&x) => x,
+        };
         PadBoundedIter {
             bounded_pad: self,
-            current_idx: 0,
+            current_idx,
         }
     }
 }
@@ -87,17 +94,26 @@ pub struct PadBoundedLoad<D: Copy, L: Iterator<Item = D>, R: RangeBounds<usize>>
     pad: PadBounded<D, R>,
     load: L,
 }
-impl<D: Copy, L: Iterator<Item = D>, R: RangeBounds<usize>> IntoIterator
-    for PadBoundedLoad<D, L, R>
+impl<D, L, R> IntoIterator for PadBoundedLoad<D, L, R>
+where
+    D: Copy,
+    L: Iterator<Item = D>,
+    R: RangeBounds<usize>,
 {
     type Item = D;
 
     type IntoIter = PadBoundedLoadIter<D, L, R>;
 
     fn into_iter(self) -> Self::IntoIter {
+        let start_bound = self.pad.range.start_bound();
+        let current_idx = match start_bound {
+            Bound::Unbounded => 0,
+            Bound::Excluded(&x) => x + 1,
+            Bound::Included(&x) => x,
+        };
         PadBoundedLoadIter {
             loaded_bounded_pad: self,
-            current_idx: 0,
+            current_idx,
         }
     }
 }
@@ -106,8 +122,11 @@ pub struct PadBoundedLoadIter<D: Copy, L: Iterator<Item = D>, R: RangeBounds<usi
     current_idx: usize,
 }
 
-impl<D: Copy, L: Iterator<Item = D>, R: RangeBounds<usize>> Iterator
-    for PadBoundedLoadIter<D, L, R>
+impl<D, L, R> Iterator for PadBoundedLoadIter<D, L, R>
+where
+    D: Copy,
+    L: Iterator<Item = D>,
+    R: RangeBounds<usize>,
 {
     type Item = D;
 
@@ -143,11 +162,19 @@ mod test {
         // load() 用于将其他迭代器装载到 pad 的指定范围，这样迭代超出范围后，自动使用 pad::new(value) 中的 value 进行填充。
         // Note: 由于 pad 的无限性和同一性，get(0..=9) 和 get(10..=19) 并没有什么区别。但是
         // 在 0..infinite 的不同片段中进行填充时，所表达的含义并不相同。
+        // ___________________________________________________
         // pad0 pad1 pad2 pad3 ... pad100 pad101 pad102 pad103
         // a1   a2   padded...     b1     b2     b3     padded
+        // ___________________________________________________
         // get(0..=3).load(a)      get(100..=103).load(b)
-        let pad_item_with_0xff = Padding::new(&0xff).get(0..=9).load(item.iter());
-        for value in pad_item_with_0xff {
+        // ___________________________________________________
+        let padding = Padding::new(&0xff);
+        let pad_item1_with_0xff = padding.get(0..=9).load(item.iter());
+        let pad_item2_with_0x55 = padding.get(20..=29).load(item.iter());
+        for value in pad_item1_with_0xff
+            .into_iter()
+            .chain(pad_item2_with_0x55.into_iter())
+        {
             println!("{value}");
         }
     }
