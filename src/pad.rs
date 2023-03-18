@@ -13,18 +13,28 @@ impl<D: Copy> Padding<D> {
         self.data
     }
     pub fn get<T: RangeBounds<usize>>(self, range: T) -> PadBounded<D, T> {
-        PadBounded { range, pad: self }
+        PadBounded {
+            range,
+            data: self.data,
+        }
+    }
+    pub fn load<L: Iterator<Item = D>>(self, iter: L) -> PadLoaded<D, L> {
+        PadLoaded {
+            load: iter,
+            data: self.data,
+        }
     }
 }
 pub struct PadBounded<D: Copy, R: RangeBounds<usize>> {
     range: R,
-    pad: Padding<D>,
+    data: D,
 }
 impl<D: Copy, R: RangeBounds<usize>> PadBounded<D, R> {
     pub fn load<I: Iterator<Item = D>>(self, iterator: I) -> PadBoundedLoad<D, I, R> {
         PadBoundedLoad {
-            pad: self,
             load: iterator,
+            data: self.data,
+            range: self.range,
         }
     }
 }
@@ -36,8 +46,9 @@ impl<D: Copy> Iterator for Padding<D> {
     }
 }
 
-pub struct PadBoundedIter<D: Copy, T: RangeBounds<usize>> {
-    bounded_pad: PadBounded<D, T>,
+pub struct PadBoundedIter<D: Copy, R: RangeBounds<usize>> {
+    data: D,
+    range: R,
     current_idx: usize,
 }
 
@@ -54,8 +65,9 @@ impl<D: Copy, L: RangeBounds<usize>> IntoIterator for PadBounded<D, L> {
             Bound::Included(&x) => x,
         };
         PadBoundedIter {
-            bounded_pad: self,
             current_idx,
+            data: self.data,
+            range: self.range,
         }
     }
 }
@@ -63,9 +75,9 @@ impl<D: Copy, L: RangeBounds<usize>> Iterator for PadBoundedIter<D, L> {
     type Item = D;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.bounded_pad.range.contains(&self.current_idx) {
+        if self.range.contains(&self.current_idx) {
             self.current_idx += 1;
-            Some(self.bounded_pad.pad.data)
+            Some(self.data)
         } else {
             None
         }
@@ -73,8 +85,8 @@ impl<D: Copy, L: RangeBounds<usize>> Iterator for PadBoundedIter<D, L> {
 }
 
 pub struct PadLoaded<D: Copy, L: Iterator<Item = D>> {
-    pad: Padding<D>,
     load: L,
+    data: D,
 }
 
 impl<D: Copy, L: Iterator<Item = D>> Iterator for PadLoaded<D, L> {
@@ -83,7 +95,7 @@ impl<D: Copy, L: Iterator<Item = D>> Iterator for PadLoaded<D, L> {
     fn next(&mut self) -> Option<Self::Item> {
         let current_value = self.load.next();
         if current_value.is_none() {
-            Some(self.pad.data)
+            Some(self.data)
         } else {
             current_value
         }
@@ -91,7 +103,8 @@ impl<D: Copy, L: Iterator<Item = D>> Iterator for PadLoaded<D, L> {
 }
 
 pub struct PadBoundedLoad<D: Copy, L: Iterator<Item = D>, R: RangeBounds<usize>> {
-    pad: PadBounded<D, R>,
+    data: D,
+    range: R,
     load: L,
 }
 impl<D, L, R> IntoIterator for PadBoundedLoad<D, L, R>
@@ -105,20 +118,24 @@ where
     type IntoIter = PadBoundedLoadIter<D, L, R>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let start_bound = self.pad.range.start_bound();
+        let start_bound = self.range.start_bound();
         let current_idx = match start_bound {
             Bound::Unbounded => 0,
             Bound::Excluded(&x) => x + 1,
             Bound::Included(&x) => x,
         };
         PadBoundedLoadIter {
-            loaded_bounded_pad: self,
             current_idx,
+            data: self.data,
+            load: self.load,
+            range: self.range,
         }
     }
 }
 pub struct PadBoundedLoadIter<D: Copy, L: Iterator<Item = D>, R: RangeBounds<usize>> {
-    loaded_bounded_pad: PadBoundedLoad<D, L, R>,
+    data: D,
+    load: L,
+    range: R,
     current_idx: usize,
 }
 
@@ -131,22 +148,16 @@ where
     type Item = D;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let load = &mut self.loaded_bounded_pad.load;
+        let load = &mut self.load;
         let current_value = load.next();
-        if self
-            .loaded_bounded_pad
-            .pad
-            .range
-            .contains(&self.current_idx)
-            == false
-        {
+        if self.range.contains(&self.current_idx) == false {
             None
         } else if current_value.is_some() {
             self.current_idx += 1;
             current_value
         } else {
             self.current_idx += 1;
-            Some(self.loaded_bounded_pad.pad.pad.data)
+            Some(self.data)
         }
     }
 }
