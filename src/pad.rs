@@ -133,19 +133,20 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let load = &mut self.loaded_bounded_pad.load;
         let current_value = load.next();
-        if current_value.is_some() {
-            self.current_idx += 1;
-            current_value
-        } else if self
+        if self
             .loaded_bounded_pad
             .pad
             .range
             .contains(&self.current_idx)
+            == false
         {
+            None
+        } else if current_value.is_some() {
+            self.current_idx += 1;
+            current_value
+        } else {
             self.current_idx += 1;
             Some(self.loaded_bounded_pad.pad.pad.data)
-        } else {
-            None
         }
     }
 }
@@ -156,7 +157,7 @@ mod test {
 
     #[test]
     fn test_load() {
-        let item: [u8; 4] = [0, 1, 2, 3];
+        let item1: [u8; 4] = [0, 1, 2, 3];
         // Padding 自身是一个 0 .. infinite 的迭代器
         // get() 函数将其切片，只取某一范围的元素，如 0 到 9（包含）
         // load() 用于将其他迭代器装载到 pad 的指定范围，这样迭代超出范围后，自动使用 pad::new(value) 中的 value 进行填充。
@@ -169,12 +170,8 @@ mod test {
         // get(0..=3).load(a)      get(100..=103).load(b)
         // ___________________________________________________
         let padding = Padding::new(&0xff);
-        let pad_item1_with_0xff = padding.get(0..=9).load(item.iter());
-        let pad_item2_with_0x55 = padding.get(20..=29).load(item.iter());
-        for value in pad_item1_with_0xff
-            .into_iter()
-            .chain(pad_item2_with_0x55.into_iter())
-        {
+        let pad_item1_with_0xff = padding.get(0..=2).load(item1.iter());
+        for value in pad_item1_with_0xff {
             println!("{value}");
         }
     }
