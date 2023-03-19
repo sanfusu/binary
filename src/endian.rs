@@ -1,4 +1,5 @@
 use core::array::TryFromSliceError;
+use std::mem::size_of;
 
 /// 小端法编码的 T （字节序）
 /// 小端法只会在 to_bytes 和 from_bytes 类似的操作时才会体现
@@ -59,3 +60,52 @@ macro_rules! impl_endian {
 
 impl_endian!(u8, u16, u32, u64, u128);
 impl_endian!(i8, i16, i32, i64, i128);
+
+pub struct EndianIter<T: Sized> {
+    data: T, // 此时必须是对于的 endian 布局
+    idx: usize,
+}
+
+impl<T> Iterator for EndianIter<T> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx >= size_of::<T>() {
+            return None;
+        } else {
+            let ptr = (&self.data) as *const T as *const u8;
+            let byte = unsafe { Some(ptr.offset(self.idx as isize).read()) };
+            self.idx += 1;
+            return byte;
+        }
+    }
+}
+
+macro_rules! impl_into_iterator {
+    ($($ty:ty),+) => {
+        $(
+            impl IntoIterator for Le<$ty> {
+                type Item = u8;
+                type IntoIter = EndianIter<$ty>;
+                fn into_iter(self)->Self::IntoIter{
+                    EndianIter {
+                        data: self.0.to_le(),
+                        idx:0,
+                    }
+                }
+            }
+            impl IntoIterator for Be<$ty> {
+                type Item = u8;
+                type IntoIter = EndianIter<$ty>;
+                fn into_iter(self)->Self::IntoIter{
+                    EndianIter {
+                        data: self.0.to_be(),
+                        idx:0,
+                    }
+                }
+            }
+        )+
+    };
+}
+
+impl_into_iterator!(u8, u16, u32, u64, u128);
