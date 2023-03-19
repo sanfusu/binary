@@ -1,7 +1,6 @@
 use std::ops::{Bound, RangeBounds};
 
-#[derive(Clone, Copy)]
-pub struct Padding<D: Copy> {
+pub struct Padding<D> {
     data: D,
 }
 
@@ -181,7 +180,8 @@ mod test {
         // get(0..=3).load(a)      get(100..=103).load(b)
         // ___________________________________________________
         let padding = Padding::new(&0xff);
-        let pad_item1_with_0xff = padding.get(0..=2).load(item1.iter());
+        let iterator = item1.iter();
+        let pad_item1_with_0xff = padding.get(0..=9).load(iterator);
         for value in pad_item1_with_0xff {
             println!("{value}");
         }
