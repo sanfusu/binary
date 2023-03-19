@@ -109,3 +109,25 @@ macro_rules! impl_into_iterator {
 }
 
 impl_into_iterator!(u8, u16, u32, u64, u128);
+
+macro_rules! impl_try_from_endian_slice {
+    ($($ty:ty),+) => {
+        $(
+            impl TryFrom<Le<&[u8]>> for $ty {
+                type Error = TryFromSliceError;
+
+                fn try_from(value: Le<&[u8]>) -> Result<Self, Self::Error> {
+                    Ok(<$ty>::from_le_bytes(value.0.try_into()?))
+                }
+            }
+            impl TryFrom<Be<&[u8]>> for $ty {
+                type Error = TryFromSliceError;
+
+                fn try_from(value: Be<&[u8]>) -> Result<Self, Self::Error> {
+                    Ok(<$ty>::from_be_bytes(value.0.try_into()?))
+                }
+            }
+        )+
+    };
+}
+impl_try_from_endian_slice!(u8, u16, u32, u64, u128);
